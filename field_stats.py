@@ -474,4 +474,5 @@ class FieldStats:
                 graficas_previas.append(grafica)
         for grafica in graficas_previas:
             grafica.deleteLater()
-            
+
+
