@@ -475,4 +475,3 @@ class FieldStats:
         for grafica in graficas_previas:
             grafica.deleteLater()
 
-# un nuevo ensayo con emacs
