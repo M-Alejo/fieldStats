@@ -475,3 +475,4 @@ class FieldStats:
         for grafica in graficas_previas:
             grafica.deleteLater()
 
+# comentario para ensayar nuevamente
