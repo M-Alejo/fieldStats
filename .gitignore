@@ -1,0 +1,9 @@
+field_stats.py~
+README.txt
+.gitignore~
+README.html
+pb_tool.cfg
+Makefile
+pylintrc
+resources.qrc
+plugin_upload.py
