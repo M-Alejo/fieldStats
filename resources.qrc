@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/plugins/field_stats" >
-        <file>icon.png</file>
-    </qresource>
-</RCC>
