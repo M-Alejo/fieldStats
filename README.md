@@ -4,6 +4,8 @@
 
 The Field Stats Plugin allows you calculate basic statistics and create a histogram and boxplot for numeric fields in vector layers.
 
+Your QGIS installation must have [pandas](https://pandas.pydata.org/) and [matplotlib](https://matplotlib.org/)
+
 ## How to install
 ![Plot interactions](img/how_to_install.gif)
 
