@@ -9,13 +9,13 @@ Your QGIS installation must have [pandas](https://pandas.pydata.org/) and [matpl
 ## How to install
 ![Plot interactions](img/how_to_install.gif)
 
-The next images shows how to install
+The next images show you how to install
 ![Plot interactions](img/img_install_1.png)
 ![Plot interactions](img/img_install_2.png)
 ![Plot interactions](img/img_install_3.png)
 
 ## How to use
-Field Stats can make the stats and graph for all features or only selected features and you can round de statistic to desire decimal
+Field Stats can make the stats and graph for all features or only selected features and you can round the statistics to desire decimal
 
 All Features
 
@@ -30,9 +30,9 @@ Next image resume how to use
 ![Plot interactions](img/img_usage.png)
 
 ## How to install Pandas and matplotlib library in Windows
-Your QGIS installation must have [pandas](https://pandas.pydata.org/) and [matplotlib](https://matplotlib.org/), in Windows with the OsGEO installer follow the next steps if don't have the libraries.
+Your QGIS installation must have [pandas](https://pandas.pydata.org/) and [matplotlib](https://matplotlib.org/), in Windows with the OSGeo installer follow the next steps if don't have the libraries.
 
-Search the Osgeo4W in windows menu and select Setup option
+Search the OSGeo4W in windows menu and select Setup option
 
 ![Plot interactions](img/img_1_windows.png)
 
