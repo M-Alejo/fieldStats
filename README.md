@@ -40,7 +40,7 @@ Select advanced install and clic in next (siguiente)
 
 ![Plot interactions](img/img_2_windows.png)
 
-Select intall from internet and clic in next (siguiente)
+Select install from internet and clic in next (siguiente)
 
 ![Plot interactions](img/img_3_windows.png)
 
