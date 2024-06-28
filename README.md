@@ -67,5 +67,5 @@ Type Pandas or Matplolib, to install the library, when you don't have the librar
 Wait to installation to finish and clic on `Finish`
 ![Plot interactions](img/img_9_windows.png)
 
-If you are using the plugin on MacOS or Linux install the libraries using `pip`, `conda` or `mamba` command, its on your hands. Better if you have installed QGIS into an virtual env.
+If you are using the plugin on MacOS or Linux install the libraries using `pip`, `conda` or `mamba` command, its on your hands. Better if you have installed QGIS into a virtual env.
 
