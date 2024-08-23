@@ -364,7 +364,18 @@ class FieldStats:
         # clear all graph
         self.limpiar_grafica()
         # graph style
-        plt.style.use('seaborn-v0_8-whitegrid')
+        estilos = plt.style.available
+        # look for proper style
+        if 'seaborn-v0_8-whitegrid' in estilos:
+            plt.style.use('seaborn-v0_8-whitegrid')
+        elif 'seaborn-whitegrid' in estilos:
+            plt.style.use('seaborn-whitegrid')
+        elif 'ggplot' in estilos:
+            plt.style.use('ggplot')
+        elif 'bmh' in estilos:
+            plt.style.use('bmh')
+        else:
+            plt.style.use('classic')
         # add figure to canvas
         self.figura = plt.figure(figsize=(4, 2.8), tight_layout=True)
         # make an instance of FigureCanvas and add figure without axes
