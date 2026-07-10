@@ -17,17 +17,17 @@ The next images show you how to install
 ## How to use
 Field Stats can make the stats and graph for all features or only selected features and you can round the statistics to desire decimal
 
-All Features
+All Features with icon
 
 ![Plot interactions](img/how_to_use_1.gif)
 
-Selected Features
+All Features with right clic on layer
 
 ![Plot interactions](img/how_to_use_2.gif)
 
-Next image resume how to use
+Selected Features with right clic on layer
 
-![Plot interactions](img/img_usage.png)
+![Plot interactions](img/how_to_use_3.gif)
 
 ## How to install Pandas and matplotlib library in Windows
 Your QGIS installation must have [pandas](https://pandas.pydata.org/) and [matplotlib](https://matplotlib.org/), in Windows with the OSGeo installer follow the next steps if don't have the libraries.
