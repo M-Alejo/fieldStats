@@ -21,25 +21,41 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QApplication, QFileDialog, QTableWidgetItem
 
-# Initialize Qt resources from file resources.py
-from .resources import *
 # Import the code for the dialog
 from .field_stats_dialog import FieldStatsDialog
 import os.path
 
-# Import qgis core complete, matplotlib and pandas
+# Import qgis core complete, pandas and matplotlib
 from qgis.core import *
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import pandas as pd
 
+# Try qt6 if dont work try qt5 for qgis 4 and 3 
+try:
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+except ImportError:
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class FieldStats:
     """QGIS Plugin Implementation."""
+
+    # Field Stats v0.3+ color palette, used for the boxplot/histogram graph
+    COLOR_CAJA = '#339999'      # teal - boxplot/histogram fill
+    COLOR_MEDIA = '#8B0000'     # darkred - mean line/point
+    COLOR_Q1 = '#FFD700'        # gold - Q1 line
+    COLOR_Q3 = '#4B0082'        # indigo - Q3 line
+    COLOR_ATIPICOS = '#B22222'  # firebrick - outlier points
+
+    # Row labels for tblResultados, in the same order returned by
+    # estadisticas_num().
+    ETIQUETAS_ESTADISTICAS = [
+        'Registros', 'Nulos', 'Suma', 'Media', 'SD (muestra)',
+        'Mín', 'Q1 (0.25)', 'Q2 (0.5)', 'Q3 (0.75)', 'Máx'
+    ]
 
     def __init__(self, iface):
         """Constructor.
@@ -166,12 +182,27 @@ class FieldStats:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/field_stats/icon.png'
-        self.add_action(
+        icon_path = os.path.join(self.plugin_dir, 'icon.png')
+        action = self.add_action(
             icon_path,
-            text=self.tr(u'calculate stats'),
+            text=self.tr(u'Calculate stats'),
             callback=self.run,
             parent=self.iface.mainWindow())
+
+        try:
+            tipo_capa_vector = Qgis.LayerType.Vector
+        except AttributeError:
+            tipo_capa_vector = QgsMapLayer.VectorLayer
+        self.iface.addCustomActionForLayerType(
+            action,
+            '',               # empty menu name: only add it to the context
+                              # menu, not to an extra menu in the main window
+            tipo_capa_vector,
+            True              # allLayers=True: available for every vector
+                              # layer automatically, current and future
+        )
+        # Keep a reference so unload() can unregister it
+        self.context_menu_action = action
 
         # will be set False in run()
         self.first_start = True
@@ -184,6 +215,9 @@ class FieldStats:
                 self.tr(u'&Field Stats'),
                 action)
             self.iface.removeToolBarIcon(action)
+        # Unregister the layer right-click context menu entry
+        if getattr(self, 'context_menu_action', None) is not None:
+            self.iface.removeCustomActionForLayerType(self.context_menu_action)
 
 
     def run(self):
@@ -201,17 +235,31 @@ class FieldStats:
         self.dlg.cmbCapas.layerChanged.connect(self.dlg.cmbCampos.setLayer)
         # Filter numeric fields only
         self.dlg.cmbCampos.setFilters(QgsFieldProxyModel.Numeric)
+        
+        capa_activa = self.iface.activeLayer()
+        if capa_activa is not None:
+            # active layer
+            self.dlg.cmbCapas.setLayer(capa_activa)
+            # fields from active layer
+            self.dlg.cmbCampos.setLayer(capa_activa)
         # Check if there is selected rows
         self.dlg.chcSeleccion.stateChanged.connect(self.obtener_valores_de_campo)
         # Calculate stats when click on button
         self.dlg.btnCalcular.clicked.connect(self.btn_calcular_click)
         # round decimal places
         self.dlg.spBoxDecimales.valueChanged.connect(self.num_decimales)
+        # copy results table to clipboard
+        self.dlg.btnCopiar.clicked.connect(self.copiar_resultados)
+        # export graph to file
+        self.dlg.btnExportar.clicked.connect(self.exportar_grafica)
 
         # show the dialog
         self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
+        # Run the dialog event loop.
+        if hasattr(self.dlg, 'exec'):
+            result = self.dlg.exec()
+        else:
+            result = self.dlg.exec_()
         # See if OK was pressed
         if result:
             # Do something useful here - delete the line containing pass and
@@ -226,7 +274,7 @@ class FieldStats:
         return a Pandas data series with values from selected field
         """
         capa = self.dlg.cmbCapas.currentLayer()
-        campo_seleccionado = self.dlg.cmbCampos.currentField()    
+        campo_seleccionado = self.dlg.cmbCampos.currentField()
         # if only selected is enable
         if self.dlg.chcSeleccion.isChecked() == True:
             # list of values from selected rows of selected field
@@ -268,26 +316,14 @@ class FieldStats:
         datos = self.obtener_valores_de_campo()
         # make stats
         if datos is None:
-            mensaje = 'No hay datos'
-            self.dlg.lbResultados.setText(mensaje)
+            self.mostrar_mensaje_tabla('No hay datos')
             self.actualizar_grafica()
         else:
             estadisticas_campo = self.estadisticas_num(datos)
             # Round to 6 decimal places by default
             redondeo_estadisticas = [round(valor, 6) for valor in estadisticas_campo]
-            # Message with stats results
-            mensaje = 'Registros: {}'.format(str(int(redondeo_estadisticas[0])))
-            mensaje += '\nNulos: {}'.format(str(int(redondeo_estadisticas[1])))
-            mensaje += '\nSuma: {}'.format(str(redondeo_estadisticas[2]))
-            mensaje += '\nMedia: {}'.format(str(redondeo_estadisticas[3]))
-            mensaje += '\nSD (muestra): {}'.format(str(redondeo_estadisticas[4]))
-            mensaje += '\nMín: {}'.format(str(redondeo_estadisticas[5]))
-            mensaje += '\n(Q1: 0.25): {}'.format(str(redondeo_estadisticas[6]))
-            mensaje += '\n(Q2: 0.5): {}'.format(str(redondeo_estadisticas[7]))
-            mensaje += '\n(Q3: 0.75): {}'.format(str(redondeo_estadisticas[8]))
-            mensaje += '\nMáx: {}'.format(str(redondeo_estadisticas[9]))
-            # Refresh message
-            self.dlg.lbResultados.setText(mensaje)
+            # Refresh results table
+            self.actualizar_tabla_resultados(redondeo_estadisticas)
             # Refresh histogram and boxplot
             self.actualizar_grafica()
 
@@ -302,26 +338,84 @@ class FieldStats:
         # Get values from selected field
         datos = self.obtener_valores_de_campo()
         if datos is None:
-            mensaje = 'No hay datos'
-            self.dlg.lbResultados.setText(mensaje)
+            self.mostrar_mensaje_tabla('No hay datos')
         else:
             # Calculate stats
             estadisticas_campo = self.estadisticas_num(datos)
             # Round stats to given decimal place
             redondeo_estadisticas = [round(valor, decimales) for valor in estadisticas_campo]
-            # Message with stats results
-            mensaje = 'Registros: {}'.format(str(int(redondeo_estadisticas[0])))
-            mensaje += '\nNulos: {}'.format(str(int(redondeo_estadisticas[1])))
-            mensaje += '\nSuma: {}'.format(str(redondeo_estadisticas[2]))
-            mensaje += '\nMedia: {}'.format(str(redondeo_estadisticas[3]))
-            mensaje += '\nSD (muestra): {}'.format(str(redondeo_estadisticas[4]))
-            mensaje += '\nMín: {}'.format(str(redondeo_estadisticas[5]))
-            mensaje += '\n(Q1: 0.25): {}'.format(str(redondeo_estadisticas[6]))
-            mensaje += '\n(Q2: 0.5): {}'.format(str(redondeo_estadisticas[7]))
-            mensaje += '\n(Q3: 0.75): {}'.format(str(redondeo_estadisticas[8]))
-            mensaje += '\nMáx: {}'.format(str(redondeo_estadisticas[9]))
-            # Refresh message
-            self.dlg.lbResultados.setText(mensaje)
+            # Refresh results table
+            self.actualizar_tabla_resultados(redondeo_estadisticas)
+
+    # Method to fill tblResultados with a list of (already rounded) stats,
+    # in the same order as ETIQUETAS_ESTADISTICAS / estadisticas_num().
+    def actualizar_tabla_resultados(self, valores):
+        """
+        actualizar_tabla_resultados
+        Fill tblResultados with the calculated stats.
+        """
+        tabla = self.dlg.tblResultados
+        tabla.setRowCount(len(self.ETIQUETAS_ESTADISTICAS))
+        for fila, etiqueta in enumerate(self.ETIQUETAS_ESTADISTICAS):
+            valor = valores[fila]
+            # Registros and Nulos are counts, show them without decimals
+            if etiqueta in ('Registros', 'Nulos'):
+                texto_valor = str(int(valor))
+            else:
+                texto_valor = str(valor)
+            item_etiqueta = QTableWidgetItem(etiqueta)
+            item_valor = QTableWidgetItem(texto_valor)
+            item_valor.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            tabla.setItem(fila, 0, item_etiqueta)
+            tabla.setItem(fila, 1, item_valor)
+
+    # Method to show a single message spanning tblResultados, used when
+    # there is no data to display (e.g. empty layer/field).
+    def mostrar_mensaje_tabla(self, mensaje):
+        """
+        mostrar_mensaje_tabla
+        Show a single-row message across tblResultados.
+        """
+        tabla = self.dlg.tblResultados
+        tabla.setRowCount(1)
+        item = QTableWidgetItem(mensaje)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        tabla.setItem(0, 0, item)
+        tabla.setSpan(0, 0, 1, 2)
+
+    # Method to copy the results table to the clipboard as tab-separated text
+    def copiar_resultados(self):
+        """
+        copiar_resultados
+        Copy tblResultados content to the clipboard as tab-separated text,
+        one row per line, so it can be pasted directly into a spreadsheet.
+        """
+        tabla = self.dlg.tblResultados
+        filas = []
+        for fila in range(tabla.rowCount()):
+            item_etiqueta = tabla.item(fila, 0)
+            item_valor = tabla.item(fila, 1)
+            etiqueta = item_etiqueta.text() if item_etiqueta else ''
+            valor = item_valor.text() if item_valor else ''
+            filas.append('{}\t{}'.format(etiqueta, valor))
+        QApplication.clipboard().setText('\n'.join(filas))
+
+    # Method to export the current graph (boxplot + histogram) to a file
+    def exportar_grafica(self):
+        """
+        exportar_grafica
+        Save the current matplotlib figure to a file chosen by the user.
+        """
+        if not hasattr(self, 'figura') or self.figura is None:
+            return
+        ruta, _ = QFileDialog.getSaveFileName(
+            self.dlg,
+            self.tr(u'Exportar gráfica'),
+            '',
+            'PNG (*.png);;PDF (*.pdf);;SVG (*.svg)'
+        )
+        if ruta:
+            self.figura.savefig(ruta, dpi=150, bbox_inches='tight')
 
     # Method to update stats
     def estadisticas_num(self, data_series):
@@ -416,34 +510,36 @@ class FieldStats:
             # refresh canvas
             self.canvas.draw()
         else:
-            # Make axes with boxplot
-            self.axes[0].boxplot(datos, # values to boxplot
-                                 vert=False, # horizontal boxplot
-                                 labels= [''], # erase labels from boxplot
-                                 widths=(0.7), # set wide for boxplot
-                                 showmeans=True, # show media value in boxplot
-                                 meanprops={'marker': 'o',
-                                            'markersize': 3,
-                                            'markerfacecolor':'red',
-                                            'markeredgecolor':'none'}, # set color and size to media point
-                                 patch_artist=True, # fill box, if false the box is empty
-                                 boxprops = dict(facecolor = "yellowgreen"), # set box color
-                                 flierprops={'marker': 'o',
-                                             'markersize': 3,
-                                             'markerfacecolor': 'black',
-                                             'markeredgecolor':'none'}, # set outliers color and size
-                                 showfliers=True # show outliers, if False hide
-                                 )
+            boxplot_kwargs = dict(
+                vert=False, # horizontal boxplot
+                widths=(0.7), # set wide for boxplot
+                showmeans=True, # show media value in boxplot
+                meanprops={'marker': 'o',
+                           'markersize': 3,
+                           'markerfacecolor': self.COLOR_MEDIA,
+                           'markeredgecolor':'none'}, # set color and size to media point
+                patch_artist=True, # fill box, if false the box is empty
+                boxprops = dict(facecolor = self.COLOR_CAJA), # set box color
+                flierprops={'marker': 'o',
+                            'markersize': 3,
+                            'markerfacecolor': self.COLOR_ATIPICOS,
+                            'markeredgecolor':'none'}, # set outliers color and size
+                showfliers=True # show outliers, if False hide
+            )
+            try:
+                self.axes[0].boxplot(datos, tick_labels=[''], **boxplot_kwargs)
+            except TypeError:
+                self.axes[0].boxplot(datos, labels=[''], **boxplot_kwargs)
             
             # Make axes with histogram
             self.axes[1].hist(datos, # values to histogram
                               bins='sqrt', # method for bins size
-                              color = "yellowgreen" # color graph
+                              color = self.COLOR_CAJA # color graph
                               )
             
             # Add vertical line with mean value
             self.axes[1].axvline(x = datos.mean(), # value to graph: mean
-                                 color = 'black',
+                                 color = self.COLOR_MEDIA,
                                  linestyle='dashed',
                                  linewidth= 1,
                                  label='Media'
@@ -451,7 +547,7 @@ class FieldStats:
             
             # Add vertical line with Q1 value
             self.axes[1].axvline(x = datos.quantile(0.25), # value to graph: Q1
-                                 color = 'blue',
+                                 color = self.COLOR_Q1,
                                  linestyle='dashed',
                                  linewidth= 1,
                                  label='Q1'
@@ -459,7 +555,7 @@ class FieldStats:
             
             # Add vertical line with Q3 value
             self.axes[1].axvline(x = datos.quantile(0.75), # value to graph: Q3
-                                 color = 'red',
+                                 color = self.COLOR_Q3,
                                  linestyle='dashed',
                                  linewidth= 1,
                                  label='Q3'
