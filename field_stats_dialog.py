@@ -42,3 +42,9 @@ class FieldStatsDialog(QtWidgets.QDialog, FORM_CLASS):
         # http://qt-project.org/doc/qt-4.8/designer-using-a-ui-file.html
         # #widgets-and-dialogs-with-auto-connect
         self.setupUi(self)
+
+        # A couple of QTableWidget tweaks that are simpler to do here than
+        # from the .ui file: hide the row-number header and make the
+        # "Valor" column fill the remaining width.
+        self.tblResultados.verticalHeader().setVisible(False)
+        self.tblResultados.horizontalHeader().setStretchLastSection(True)
