@@ -29,16 +29,26 @@ from qgis.PyQt.QtWidgets import QAction, QApplication, QFileDialog, QTableWidget
 from .field_stats_dialog import FieldStatsDialog
 import os.path
 
-# Import qgis core complete, pandas and matplotlib
+# Import qgis core complete, pandas and matplotlib.
+# These are wrapped in try/except so that a missing dependency (pandas or
+# matplotlib not installed in QGIS's Python environment) does not prevent
+# the plugin itself from loading. DEPENDENCIAS_DISPONIBLES is checked in
+# run(), where a clear message is shown instead of QGIS's generic
+# "couldn't load plugin" error.
 from qgis.core import *
-import matplotlib.pyplot as plt
-import pandas as pd
-
-# Try qt6 if dont work try qt5 for qgis 4 and 3 
 try:
-    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-except ImportError:
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    # Try qt6 if dont work try qt5 for qgis 4 and 3
+    try:
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    except ImportError:
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    DEPENDENCIAS_DISPONIBLES = True
+    ERROR_DEPENDENCIAS = None
+except ImportError as error:
+    DEPENDENCIAS_DISPONIBLES = False
+    ERROR_DEPENDENCIAS = str(error)
 
 class FieldStats:
     """QGIS Plugin Implementation."""
@@ -228,6 +238,19 @@ class FieldStats:
         if self.first_start == True:
             self.first_start = False
 
+        # Stop here with a clear message if pandas/matplotlib are missing,
+        # instead of letting the dialog open and crash on first use.
+        if not DEPENDENCIAS_DISPONIBLES:
+            self.iface.messageBar().pushCritical(
+                self.tr(u'Field Stats'),
+                self.tr(
+                    u'Faltan paquetes de Python requeridos (pandas y/o '
+                    u'matplotlib). Instálalos en el entorno de Python de '
+                    u'QGIS y vuelve a intentarlo. Detalle: {}'
+                ).format(ERROR_DEPENDENCIAS)
+            )
+            return
+
         self.dlg = FieldStatsDialog()
         # Filter layers to show vector type only
         self.dlg.cmbCapas.setFilters(QgsMapLayerProxyModel.VectorLayer)
@@ -243,7 +266,7 @@ class FieldStats:
             # fields from active layer
             self.dlg.cmbCampos.setLayer(capa_activa)
         # Check if there is selected rows
-        self.dlg.chcSeleccion.stateChanged.connect(self.obtener_valores_de_campo)
+        self.dlg.chcSeleccion.stateChanged.connect(self.btn_calcular_click)
         # Calculate stats when click on button
         self.dlg.btnCalcular.clicked.connect(self.btn_calcular_click)
         # round decimal places
@@ -271,10 +294,14 @@ class FieldStats:
     def obtener_valores_de_campo(self):
         """
         obtener_valores_de_campo
-        return a Pandas data series with values from selected field
+        return a Pandas data series with values from selected field, or
+        None if there is no layer or no numeric field to read from (e.g.
+        the layer has no numeric fields, so cmbCampos is empty).
         """
         capa = self.dlg.cmbCapas.currentLayer()
         campo_seleccionado = self.dlg.cmbCampos.currentField()
+        if capa is None or not campo_seleccionado:
+            return None
         # if only selected is enable
         if self.dlg.chcSeleccion.isChecked() == True:
             # list of values from selected rows of selected field
@@ -304,28 +331,56 @@ class FieldStats:
             # Return the Pandas DataSeries
             return datos
 
+    # Method to pick the right "no data" message depending on why
+    # obtener_valores_de_campo() returned None.
+    def mensaje_sin_datos(self):
+        """
+        mensaje_sin_datos
+        Return the most helpful "no data" message for the current state of
+        cmbCapas/cmbCampos.
+        """
+        if self.dlg.cmbCapas.currentLayer() is None:
+            return 'Seleccione una capa'
+        elif not self.dlg.cmbCampos.currentField():
+            return 'La capa no tiene campos numéricos'
+        else:
+            return 'No hay datos'
+
     # Method to make the stats when push button
     def btn_calcular_click(self):
         """
         btn_calcular_click
         display a message with stats and make the graphs
         """
-        # Set to 6 the decimal places
-        self.dlg.spBoxDecimales.setValue(6)
-        # Get values from selected field
-        datos = self.obtener_valores_de_campo()
-        # make stats
-        if datos is None:
-            self.mostrar_mensaje_tabla('No hay datos')
-            self.actualizar_grafica()
-        else:
-            estadisticas_campo = self.estadisticas_num(datos)
-            # Round to 6 decimal places by default
-            redondeo_estadisticas = [round(valor, 6) for valor in estadisticas_campo]
-            # Refresh results table
-            self.actualizar_tabla_resultados(redondeo_estadisticas)
-            # Refresh histogram and boxplot
-            self.actualizar_grafica()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            # Use whatever decimal-places value the user currently has set,
+            # instead of forcing it back to 6 on every calculation.
+            decimales = self.dlg.spBoxDecimales.value()
+            # Get values from selected field
+            datos = self.obtener_valores_de_campo()
+            # make stats
+            if datos is None:
+                self.mostrar_mensaje_tabla(self.mensaje_sin_datos())
+                self.actualizar_grafica()
+            else:
+                estadisticas_campo = self.estadisticas_num(datos)
+                # Round to the current decimal-places setting
+                redondeo_estadisticas = [round(valor, decimales) for valor in estadisticas_campo]
+                # Refresh results table
+                self.actualizar_tabla_resultados(redondeo_estadisticas)
+                # Refresh histogram and boxplot
+                self.actualizar_grafica()
+        except Exception as error:
+            # Catch anything unexpected (e.g. a corrupt/locked layer, an
+            # unusual field type) so it shows as a friendly message instead
+            # of a raw Python traceback breaking the dialog.
+            self.iface.messageBar().pushCritical(
+                self.tr(u'Field Stats'),
+                self.tr(u'No se pudieron calcular las estadísticas: {}').format(error)
+            )
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # Method to round to given decimal place
     def num_decimales(self):
@@ -333,19 +388,28 @@ class FieldStats:
         num_decimales
         Refresh message and decimal places from stats
         """
-        # Get the value from spBoxDecimales
-        decimales = self.dlg.spBoxDecimales.value()
-        # Get values from selected field
-        datos = self.obtener_valores_de_campo()
-        if datos is None:
-            self.mostrar_mensaje_tabla('No hay datos')
-        else:
-            # Calculate stats
-            estadisticas_campo = self.estadisticas_num(datos)
-            # Round stats to given decimal place
-            redondeo_estadisticas = [round(valor, decimales) for valor in estadisticas_campo]
-            # Refresh results table
-            self.actualizar_tabla_resultados(redondeo_estadisticas)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            # Get the value from spBoxDecimales
+            decimales = self.dlg.spBoxDecimales.value()
+            # Get values from selected field
+            datos = self.obtener_valores_de_campo()
+            if datos is None:
+                self.mostrar_mensaje_tabla(self.mensaje_sin_datos())
+            else:
+                # Calculate stats
+                estadisticas_campo = self.estadisticas_num(datos)
+                # Round stats to given decimal place
+                redondeo_estadisticas = [round(valor, decimales) for valor in estadisticas_campo]
+                # Refresh results table
+                self.actualizar_tabla_resultados(redondeo_estadisticas)
+        except Exception as error:
+            self.iface.messageBar().pushCritical(
+                self.tr(u'Field Stats'),
+                self.tr(u'No se pudieron calcular las estadísticas: {}').format(error)
+            )
+        finally:
+            QApplication.restoreOverrideCursor()
 
     # Method to fill tblResultados with a list of (already rounded) stats,
     # in the same order as ETIQUETAS_ESTADISTICAS / estadisticas_num().
@@ -355,6 +419,13 @@ class FieldStats:
         Fill tblResultados with the calculated stats.
         """
         tabla = self.dlg.tblResultados
+        # Clear any leftover cell span from a previous call to
+        # mostrar_mensaje_tabla() (e.g. "La capa no tiene campos
+        # numéricos"), which merges row 0's two columns. setRowCount()
+        # alone does NOT clear spans, so without this the "Registros" row
+        # could stay merged and hide its value after switching from a
+        # layer with no data to one with valid data.
+        tabla.clearSpans()
         tabla.setRowCount(len(self.ETIQUETAS_ESTADISTICAS))
         for fila, etiqueta in enumerate(self.ETIQUETAS_ESTADISTICAS):
             valor = valores[fila]
@@ -377,6 +448,7 @@ class FieldStats:
         Show a single-row message across tblResultados.
         """
         tabla = self.dlg.tblResultados
+        tabla.clearSpans()
         tabla.setRowCount(1)
         item = QTableWidgetItem(mensaje)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
