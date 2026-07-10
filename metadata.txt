@@ -7,7 +7,7 @@ name=Field Stats
 qgisMinimumVersion=3.0
 qgisMaximumVersion=4.99
 description=This pluggins calculate basic stats and graph histogram and boxplot
-version=0.3
+version=0.4
 author=Manuel Alejandro Montealegre Martínez
 email=manuel.montealegre@udea.edu.co
 license=GNU General Public License
@@ -20,9 +20,19 @@ repository=https://github.com/M-Alejo/fieldStats
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-changelog=0.3: Qt5/Qt6 compatibility (QGIS 3 and QGIS 4): dynamic matplotlib
-    Qt backend, exec()/exec_() fallback, dropped compiled Qt resource file
-    in favor of loading the icon directly from disk.
+changelog=
+    0.4: Show message when no layer in canvas
+    0.4: Show message when layer dont have numeric fields
+    0.4: Keep decimals of user when change of field
+    0.4: Auto update when check selected option
+    0.3.1: Add export button for histogram
+    0.3.1: Add copy button for statistics
+    0.3.1: Change graph colors
+    0.3.1: Qt5/Qt6 compatibility (QGIS 3 and QGIS 4)
+    0.3.1: dynamic matplotlib
+    0.3.1: Qt backend
+    0.3.1: exec()/exec_() fallback
+    0.3.1: dropped compiled Qt resource file in favor of loading the icon directly from disk.
     0.2: fix seaborn v0_8 white-grid error
 
 # Tags are comma separated with spaces allowed
