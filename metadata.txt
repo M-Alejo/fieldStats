@@ -5,22 +5,25 @@
 [general]
 name=Field Stats
 qgisMinimumVersion=3.0
+qgisMaximumVersion=4.99
 description=This pluggins calculate basic stats and graph histogram and boxplot
-version=0.1
+version=0.3
 author=Manuel Alejandro Montealegre Martínez
 email=manuel.montealegre@udea.edu.co
-
+license=GNU General Public License
 about=It calculate basic stats and make a histogram and a boxplot graph for numeric field in vector layers.
 
 tracker=https://github.com/M-Alejo/fieldStats
 repository=https://github.com/M-Alejo/fieldStats
-# End of mandatory metadata
 
-# Recommended items:
+# End of mandatory metadata
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
-# changelog=
+changelog=0.3: Qt5/Qt6 compatibility (QGIS 3 and QGIS 4): dynamic matplotlib
+    Qt backend, exec()/exec_() fallback, dropped compiled Qt resource file
+    in favor of loading the icon directly from disk.
+    0.2: fix seaborn v0_8 white-grid error
 
 # Tags are comma separated with spaces allowed
 tags=python, field stats
@@ -37,10 +40,10 @@ deprecated=False
 # Since QGIS 3.8, a comma separated list of plugins to be installed
 # (or upgraded) can be specified.
 # Check the documentation for more information.
-# plugin_dependencies=
+# plugin_dependencies= pandas, matplotlib
 
 Category of the plugin: Raster, Vector, Database or Web
-# category=
+# category= Vector
 
 # If the plugin can run on QGIS Server.
 server=False
